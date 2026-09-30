@@ -120,27 +120,49 @@ else
             {
                 try
                 {
-                    var tlsStream = new SslStream(tcpClient.GetStream(), leaveInnerStreamOpen: false);
+                    var networkStream = tcpClient.GetStream();
+
+                    // Đọc 1 byte đầu tiên để kiểm tra Protocol
+                    byte[] headerBuffer = new byte[1];
+                    int bytesRead = await networkStream.ReadAsync(headerBuffer, 0, 1);
+
+                    if (bytesRead == 0)
+                    {
+                        tcpClient.Close();
+                        return;
+                    }
+
+                    // 0x16 (22 trong hệ thập phân) là Byte khởi đầu chuẩn của TLS Handshake Client Hello
+                    if (headerBuffer[0] != 0x16)
+                    {
+                        // Đây là Health Check của Render hoặc kết nối không mã hóa -> Ngắt kết nối mà không ghi log lỗi
+                        tcpClient.Close();
+                        return;
+                    }
+
+                    // Nếu đúng là TLS Client, tạo Wrapper Stream để khôi phục lại 1 byte đã đọc
+                    var prefixStream = new PrefixStream(networkStream, headerBuffer[0]);
+                    var tlsStream = new SslStream(prefixStream, leaveInnerStreamOpen: false);
+
                     await tlsStream.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
                     {
                         ServerCertificate = serverCertificate,
                         ClientCertificateRequired = false,
                         EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
-                        CertificateRevocationCheckMode = X509RevocationMode.Online
+                        CertificateRevocationCheckMode = X509RevocationMode.NoCheck
                     });
 
                     var session = new ClientSession(tcpClient, tlsStream);
                     lock (AllClientsLock) AllClients.Add(session);
                     await HandleClientAsync(session);
                 }
-                catch (AuthenticationException ex)
+                catch (AuthenticationException)
                 {
-                    Console.WriteLine($"[!] TLS handshake that bai: {ex.Message}");
+                    // Bỏ qua log hoặc ghi log gọn gàng
                     tcpClient.Close();
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    Console.WriteLine($"[!] Khoi tao ket noi that bai: {ex.Message}");
                     tcpClient.Close();
                 }
             });
@@ -1708,5 +1730,48 @@ else
 
         await MessageStore.DeleteAsync(req.MessageId);
         await Rooms.BroadcastAsync(message.Room, "message-deleted", new MessageDeleted(req.MessageId));
+    }
+    public class PrefixStream : Stream
+    {
+        private readonly Stream _subStream;
+        private byte[]? _firstByte;
+
+        public PrefixStream(Stream subStream, byte firstByte)
+        {
+            _subStream = subStream;
+            _firstByte = new byte[] { firstByte };
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_firstByte != null)
+            {
+                buffer.Span[0] = _firstByte[0];
+                _firstByte = null;
+                return 1;
+            }
+            return await _subStream.ReadAsync(buffer, cancellationToken);
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (_firstByte != null)
+            {
+                buffer[offset] = _firstByte[0];
+                _firstByte = null;
+                return 1;
+            }
+            return _subStream.Read(buffer, offset, count);
+        }
+
+        public override bool CanRead => _subStream.CanRead;
+        public override bool CanSeek => _subStream.CanSeek;
+        public override bool CanWrite => _subStream.CanWrite;
+        public override long Length => _subStream.Length;
+        public override long Position { get => _subStream.Position; set => _subStream.Position = value; }
+        public override void Flush() => _subStream.Flush();
+        public override long Seek(long offset, SeekOrigin origin) => _subStream.Seek(offset, origin);
+        public override void SetLength(long value) => _subStream.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count) => _subStream.Write(buffer, offset, count);
     }
 }
