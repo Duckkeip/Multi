@@ -21,4 +21,6 @@ COPY --from=build /app/publish .
 EXPOSE 5050
 ENV PORT=5050
 
+COPY certs/chatnet-server.pfx /app/certs/chatnet-server.pfx
+
 ENTRYPOINT ["dotnet", "ChatServer.dll"]

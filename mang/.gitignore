@@ -8,3 +8,5 @@ obj/
 # Visual Studio
 .vs/
 *.user
+certs/
+/app/certs/chatnet-server.pfx

@@ -76,7 +76,7 @@ if (!string.IsNullOrWhiteSpace(mongoUri))
         VoiceSessionStore = new MongoVoiceSessionStore(mongo.Database);
         await VoiceSessionStore.InitializeAsync();
 
-        Console.WriteLine($"[ChatServer] Đã kết nối MongoDB tại URI: {mongoUri}");
+        Console.WriteLine($"[ChatServer] Đã kết nối MongoDB ");
         Console.WriteLine($"[ChatServer] Tên cơ sở dữ liệu: {mongo.Database.DatabaseNamespace.DatabaseName}");
     }
     catch (Exception ex)
