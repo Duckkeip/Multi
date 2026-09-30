@@ -1,3 +1,6 @@
+ddddddddddddddd
+ddddd
+
 lỗi the remote certificate is 
 invalid because of errors in 
 the certificate chain : UntrustedRoot

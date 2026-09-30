@@ -149,7 +149,6 @@ else
 
     private static X509Certificate2 LoadTlsCertificate(IReadOnlyDictionary<string, string> config)
     {
-        // 1. Ưu tiên đọc biến môi trường hệ thống (Render/Docker) trước, nếu không có mới tìm trong file .env local
         string? certificatePath = Environment.GetEnvironmentVariable("TLS_CERT_PATH");
         if (string.IsNullOrWhiteSpace(certificatePath))
         {
@@ -158,7 +157,7 @@ else
 
         if (string.IsNullOrWhiteSpace(certificatePath))
         {
-            throw new InvalidOperationException("Thieu TLS_CERT_PATH. Server tu choi chay TCP khong ma hoa.");
+            throw new InvalidOperationException("Thieu TLS_CERT_PATH.");
         }
 
         var fullPath = Path.GetFullPath(certificatePath);
@@ -173,10 +172,8 @@ else
             config.TryGetValue("TLS_CERT_PASSWORD", out password);
         }
 
-        // 2. Tự động tương thích giữa Windows Local và Linux Docker Container
         if (OperatingSystem.IsWindows())
         {
-            // Trên Windows: Dùng UserKeySet & PersistKeySet cho Schannel
             return X509CertificateLoader.LoadPkcs12FromFile(
                 fullPath, 
                 password, 
@@ -185,11 +182,11 @@ else
         }
         else
         {
-            // Trên Linux (Render / Docker): Dùng EphemeralKeySet / MachineKeySet để làm việc với OpenSSL
+            // Trên Linux / Render: Dùng DefaultKeySet thay vì EphemeralKeySet
             return X509CertificateLoader.LoadPkcs12FromFile(
                 fullPath, 
                 password, 
-                X509KeyStorageFlags.EphemeralKeySet
+                X509KeyStorageFlags.DefaultKeySet
             );
         }
     }

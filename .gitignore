@@ -1,0 +1,15 @@
+node_modules/
+public/uploads/*
+!public/uploads/.gitkeep
+.env
+__pycache__/
+*.pyc
+.idea/
+.streamlit/secrets.toml
+.venv/
+venv/
+config/.env
+.zip
+.crt
+.key
+.pfx
