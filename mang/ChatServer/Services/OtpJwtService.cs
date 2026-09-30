@@ -8,7 +8,7 @@ public sealed class OtpJwtService
 {
     private const string Header = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
     private readonly byte[] _secret;
-
+    string secret = Environment.GetEnvironmentVariable("JWT_SECRET");
     public OtpJwtService(string secret)
     {
         if (string.IsNullOrWhiteSpace(secret))

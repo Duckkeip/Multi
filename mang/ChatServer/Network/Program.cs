@@ -39,6 +39,13 @@ public static class Program
     public static async Task Main(string[] args)
     {
         var config = EnvironmentConfig.Load();
+
+        // Hàm trợ lý đọc ưu tiên: Config local -> Biến môi trường Render
+        string GetEnv(string key) => 
+            !string.IsNullOrWhiteSpace(config.GetValueOrDefault(key, "")) 
+                ? config.GetValueOrDefault(key, "") 
+                : Environment.GetEnvironmentVariable(key) ?? "";
+
         LiveKitUrl = config.GetValueOrDefault("LIVEKIT_URL", "").Trim();
         LiveKitApiKey = config.GetValueOrDefault("LIVEKIT_API_KEY", "").Trim();
         LiveKitApiSecret = config.GetValueOrDefault("LIVEKIT_API_SECRET", "").Trim();
