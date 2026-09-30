@@ -148,48 +148,19 @@ else
     }
 
     private static X509Certificate2 LoadTlsCertificate(IReadOnlyDictionary<string, string> config)
+{
+    // Đặt đường dẫn trực tiếp tới 2 file PEM trên Render (/etc/secrets/server.crt và /etc/secrets/server.key)
+    string crtPath = "/etc/secrets/server.crt";
+    string keyPath = "/etc/secrets/server.key";
+
+    if (!File.Exists(crtPath) || !File.Exists(keyPath))
     {
-        string? certificatePath = Environment.GetEnvironmentVariable("TLS_CERT_PATH");
-        if (string.IsNullOrWhiteSpace(certificatePath))
-        {
-            config.TryGetValue("TLS_CERT_PATH", out certificatePath);
-        }
-
-        if (string.IsNullOrWhiteSpace(certificatePath))
-        {
-            throw new InvalidOperationException("Thieu TLS_CERT_PATH.");
-        }
-
-        var fullPath = Path.GetFullPath(certificatePath);
-        if (!File.Exists(fullPath)) 
-        {
-            throw new FileNotFoundException("Khong tim thay chung chi TLS.", fullPath);
-        }
-
-        string? password = Environment.GetEnvironmentVariable("TLS_CERT_PASSWORD");
-        if (string.IsNullOrWhiteSpace(password))
-        {
-            config.TryGetValue("TLS_CERT_PASSWORD", out password);
-        }
-
-        if (OperatingSystem.IsWindows())
-        {
-            return X509CertificateLoader.LoadPkcs12FromFile(
-                fullPath, 
-                password, 
-                X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet
-            );
-        }
-        else
-        {
-            // Trên Linux / Render: Dùng DefaultKeySet thay vì EphemeralKeySet
-            return X509CertificateLoader.LoadPkcs12FromFile(
-                fullPath, 
-                password, 
-                X509KeyStorageFlags.DefaultKeySet
-            );
-        }
+        throw new FileNotFoundException("Khong tim thay file server.crt hoac server.key trong /etc/secrets/");
     }
+
+    // .NET tự động kết hợp PEM Certificate và Key trên cả Windows lẫn Linux
+    return X509Certificate2.CreateFromPemFile(crtPath, keyPath);
+}
 
     private static async Task HandleClientAsync(ClientSession session)
     {
