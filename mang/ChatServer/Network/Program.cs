@@ -97,7 +97,7 @@ else
             : 5050;
         if (args.Length > 0 && int.TryParse(args[0], out var p)) port = p;
 
-        X509Certificate2 serverCertificate;
+        X509Certificate2? serverCertificate = null;
         try
         {
             serverCertificate = LoadTlsCertificate(config);
@@ -105,13 +105,13 @@ else
         catch (Exception ex) when (ex is FileNotFoundException or CryptographicException or InvalidOperationException)
         {
             Console.Error.WriteLine($"[ChatServer] Không thể khởi động TLS: {ex.Message}");
-            Console.Error.WriteLine("[ChatServer] Hãy kiểm tra TLS_CERT_PATH và TLS_CERT_PASSWORD trong .env của máy đang chạy server.");
+            Console.Error.WriteLine("[ChatServer] Hãy kiểm tra TLS_CERT_PATH và TLS_CERT_PASSWORD.");
             return;
         }
 
         var listener = new TcpListener(IPAddress.Any, port);
         listener.Start();
-        Console.WriteLine($"[ChatServer] Running...");
+        Console.WriteLine($"[ChatServer] Running on port {port}...");
 
         while (true)
         {
@@ -149,15 +149,49 @@ else
 
     private static X509Certificate2 LoadTlsCertificate(IReadOnlyDictionary<string, string> config)
     {
-        if (!config.TryGetValue("TLS_CERT_PATH", out var certificatePath) || string.IsNullOrWhiteSpace(certificatePath))
+        // 1. Ưu tiên đọc biến môi trường hệ thống (Render/Docker) trước, nếu không có mới tìm trong file .env local
+        string? certificatePath = Environment.GetEnvironmentVariable("TLS_CERT_PATH");
+        if (string.IsNullOrWhiteSpace(certificatePath))
+        {
+            config.TryGetValue("TLS_CERT_PATH", out certificatePath);
+        }
+
+        if (string.IsNullOrWhiteSpace(certificatePath))
+        {
             throw new InvalidOperationException("Thieu TLS_CERT_PATH. Server tu choi chay TCP khong ma hoa.");
+        }
 
         var fullPath = Path.GetFullPath(certificatePath);
-        if (!File.Exists(fullPath)) throw new FileNotFoundException("Khong tim thay chung chi TLS.", fullPath);
-        config.TryGetValue("TLS_CERT_PASSWORD", out var password);
-        // Schannel trên Windows cần private key nằm trong key store của người dùng để làm TLS server.
-        // Không dùng EphemeralKeySet vì nó làm AuthenticateAsServerAsync thất bại trên Windows.
-        return X509CertificateLoader.LoadPkcs12FromFile(fullPath, password, X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet);
+        if (!File.Exists(fullPath)) 
+        {
+            throw new FileNotFoundException("Khong tim thay chung chi TLS.", fullPath);
+        }
+
+        string? password = Environment.GetEnvironmentVariable("TLS_CERT_PASSWORD");
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            config.TryGetValue("TLS_CERT_PASSWORD", out password);
+        }
+
+        // 2. Tự động tương thích giữa Windows Local và Linux Docker Container
+        if (OperatingSystem.IsWindows())
+        {
+            // Trên Windows: Dùng UserKeySet & PersistKeySet cho Schannel
+            return X509CertificateLoader.LoadPkcs12FromFile(
+                fullPath, 
+                password, 
+                X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet
+            );
+        }
+        else
+        {
+            // Trên Linux (Render / Docker): Dùng EphemeralKeySet / MachineKeySet để làm việc với OpenSSL
+            return X509CertificateLoader.LoadPkcs12FromFile(
+                fullPath, 
+                password, 
+                X509KeyStorageFlags.EphemeralKeySet
+            );
+        }
     }
 
     private static async Task HandleClientAsync(ClientSession session)
