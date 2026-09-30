@@ -46,48 +46,51 @@ public static class Program
                 ? config.GetValueOrDefault(key, "") 
                 : Environment.GetEnvironmentVariable(key) ?? "";
 
-        LiveKitUrl = config.GetValueOrDefault("LIVEKIT_URL", "").Trim();
-        LiveKitApiKey = config.GetValueOrDefault("LIVEKIT_API_KEY", "").Trim();
-        LiveKitApiSecret = config.GetValueOrDefault("LIVEKIT_API_SECRET", "").Trim();
+        LiveKitUrl = GetEnv("LIVEKIT_URL").Trim();
+        LiveKitApiKey = GetEnv("LIVEKIT_API_KEY").Trim();
+        LiveKitApiSecret = GetEnv("LIVEKIT_API_SECRET").Trim();
         Email = new EmailService(config);
-        OtpTokens = new OtpJwtService(config.GetValueOrDefault("JWT_SECRET", ""));
-        if (config.TryGetValue("MONGODB_URI", out var mongoUri) && mongoUri.Length > 0)
-        {
-            try
-            {
-                var mongo = new MongoContext(mongoUri);
+        OtpTokens = new OtpJwtService(GetEnv("JWT_SECRET"));
+        var mongoUri = GetEnv("MONGODB_URI");
 
-                UserStore = new MongoUserStore(mongo.Database);
-                await UserStore.InitializeAsync();
+if (!string.IsNullOrWhiteSpace(mongoUri))
+{
+    try
+    {
+        var mongo = new MongoContext(mongoUri);
 
-                MessageStore = new MongoMessageStore(mongo.Database);
-                await MessageStore.InitializeAsync();
-                DirectMessageStore = new MongoDirectMessageStore(mongo.Database);
-                await DirectMessageStore.InitializeAsync();
+        UserStore = new MongoUserStore(mongo.Database);
+        await UserStore.InitializeAsync();
 
-                FileStore = new MongoFileStore(mongo.Database);
+        MessageStore = new MongoMessageStore(mongo.Database);
+        await MessageStore.InitializeAsync();
 
-                ServerStore = new MongoServerStore(mongo.Database);
-                await ServerStore.InitializeAsync();
+        DirectMessageStore = new MongoDirectMessageStore(mongo.Database);
+        await DirectMessageStore.InitializeAsync();
 
-                VoiceSessionStore = new MongoVoiceSessionStore(mongo.Database);
-                await VoiceSessionStore.InitializeAsync();
+        FileStore = new MongoFileStore(mongo.Database);
 
-                Console.WriteLine($"[ChatServer] Đã kết nối MongoDB tại URI: {mongoUri}");
-                Console.WriteLine($"[ChatServer] Tên cơ sở dữ liệu: {mongo.Database.DatabaseNamespace.DatabaseName}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[ChatServer] Khong ket noi duoc MongoDB: {ex.Message}");
-            }
-        }
-        else
-        {
-            Console.WriteLine("[ChatServer] Thieu MONGODB_URI trong .env.");
-        }
+        ServerStore = new MongoServerStore(mongo.Database);
+        await ServerStore.InitializeAsync();
 
-        config.TryGetValue("AI_SERVICE_URL", out var aiServiceUrl);
-        Ai = new AiService(aiServiceUrl);
+        VoiceSessionStore = new MongoVoiceSessionStore(mongo.Database);
+        await VoiceSessionStore.InitializeAsync();
+
+        Console.WriteLine($"[ChatServer] Đã kết nối MongoDB tại URI: {mongoUri}");
+        Console.WriteLine($"[ChatServer] Tên cơ sở dữ liệu: {mongo.Database.DatabaseNamespace.DatabaseName}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[ChatServer] Khong ket noi duoc MongoDB: {ex.Message}");
+    }
+}
+else
+{
+    Console.WriteLine("[ChatServer] Thieu MONGODB_URI trong .env.");
+}
+
+        var aiServiceUrl = GetEnv("AI_SERVICE_URL");
+        Ai = new AiService(aiServiceUrl);   
 
         int port = config.TryGetValue("PORT", out var configuredPort) && int.TryParse(configuredPort, out var envPort)
             ? envPort
