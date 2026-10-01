@@ -89,8 +89,8 @@ public static class Program
         builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
         var app = builder.Build();
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
-        app.MapGet("/", () => Results.Ok(new { status = "ok" }));
-        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+        app.MapMethods("/", new[] { HttpMethods.Get, HttpMethods.Head }, () => Results.Ok(new { status = "ok" }));
+        app.MapMethods("/health", new[] { HttpMethods.Get, HttpMethods.Head }, () => Results.Ok(new { status = "ok" }));
         app.Map("/ws", async context =>
         {
             if (!context.WebSockets.IsWebSocketRequest)
