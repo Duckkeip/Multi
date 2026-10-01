@@ -92,9 +92,10 @@ else
         var aiServiceUrl = GetEnv("AI_SERVICE_URL");
         Ai = new AiService(aiServiceUrl);   
 
-        int port = config.TryGetValue("PORT", out var configuredPort) && int.TryParse(configuredPort, out var envPort)
-            ? envPort
-            : 5050;
+        var configuredPort = Environment.GetEnvironmentVariable("PORT");
+        if (string.IsNullOrWhiteSpace(configuredPort))
+            configuredPort = config.GetValueOrDefault("PORT", "");
+        int port = int.TryParse(configuredPort, out var envPort) ? envPort : 5050;
         if (args.Length > 0 && int.TryParse(args[0], out var p)) port = p;
 
         X509Certificate2? serverCertificate = null;
