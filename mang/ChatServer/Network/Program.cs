@@ -119,6 +119,8 @@ else
             TcpClient tcpClient = await listener.AcceptTcpClientAsync();
             _ = Task.Run(async () =>
             {
+                var remoteEndpoint = tcpClient.Client.RemoteEndPoint;
+                Console.WriteLine($"[TCP] Accepted connection from {remoteEndpoint}");
                 try
                 {
                     var networkStream = tcpClient.GetStream();
@@ -136,7 +138,7 @@ else
                     // 0x16 (22 trong hệ thập phân) là Byte khởi đầu chuẩn của TLS Handshake Client Hello
                     if (headerBuffer[0] != 0x16)
                     {
-                        // Đây là Health Check của Render hoặc kết nối không mã hóa -> Ngắt kết nối mà không ghi log lỗi
+                        Console.WriteLine($"[TCP] Rejected non-TLS connection from {remoteEndpoint} (first byte 0x{headerBuffer[0]:X2})");
                         tcpClient.Close();
                         return;
                     }
@@ -157,13 +159,14 @@ else
                     lock (AllClientsLock) AllClients.Add(session);
                     await HandleClientAsync(session);
                 }
-                catch (AuthenticationException)
+                catch (AuthenticationException ex)
                 {
-                    // Bỏ qua log hoặc ghi log gọn gàng
+                    Console.Error.WriteLine($"[TLS] Handshake failed from {remoteEndpoint}: {ex}");
                     tcpClient.Close();
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    Console.Error.WriteLine($"[TCP] Connection failed for {remoteEndpoint}: {ex}");
                     tcpClient.Close();
                 }
             });
@@ -215,7 +218,7 @@ else
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[!] Loi voi client {remoteEp}: {ex.Message}");
+            Console.Error.WriteLine($"[Client] Unhandled error for {remoteEp}: {ex}");
         }
         finally
         {
@@ -1412,17 +1415,29 @@ else
 
     private static async Task HandleLoginAsync(ClientSession session, AuthRequest? req)
     {
+        var username = (req?.Username ?? "").Trim();
+        Console.WriteLine($"[Auth] Login attempt user='{username}' ip={session.IpAddress}");
+
         if (UserStore == null)
         {
+            Console.Error.WriteLine($"[Auth] Login rejected for user='{username}': MongoDB is unavailable.");
             await session.SendAsync("error", new ErrorResponse("MongoDB chua san sang."));
             return;
         }
 
-        var username = (req?.Username ?? "").Trim();
-        if (!await TryConsumeRateLimitAsync(session, "login", username, 5, TimeSpan.FromMinutes(10))) return;
-        if (!await TryConsumeRateLimitAsync(session, "login-ip", session.IpAddress, 20, TimeSpan.FromMinutes(10))) return;
+        if (!await TryConsumeRateLimitAsync(session, "login", username, 5, TimeSpan.FromMinutes(10)))
+        {
+            Console.WriteLine($"[Auth] Login rate-limited user='{username}' ip={session.IpAddress}");
+            return;
+        }
+        if (!await TryConsumeRateLimitAsync(session, "login-ip", session.IpAddress, 20, TimeSpan.FromMinutes(10)))
+        {
+            Console.WriteLine($"[Auth] Login rate-limited ip={session.IpAddress}");
+            return;
+        }
         if (!await UserStore.ValidateLoginAsync(username, req?.Password ?? ""))
         {
+            Console.WriteLine($"[Auth] Login rejected: invalid username or password user='{username}' ip={session.IpAddress}");
             await session.SendAsync("error", new ErrorResponse("Username hoac mat khau khong dung."));
             return;
         }
@@ -1434,6 +1449,7 @@ else
             // Send 2FA challenge
             session.Username = username;
             session.IsAuthenticated = false; // Not fully authenticated until 2FA
+            Console.WriteLine($"[Auth] Password accepted; 2FA required user='{username}' ip={session.IpAddress}");
             await session.SendAsync("2fa-required", new TwoFactorVerifyResponse(false, "Vui lòng nhập mã xác thực 2FA."));
             return;
         }
@@ -1484,6 +1500,7 @@ else
         };
         await UserStore.AddLoginHistoryAsync(username, loginEntry);
 
+        Console.WriteLine($"[Auth] Login successful user='{username}' ip={session.IpAddress}");
         await session.SendAsync("auth", new AuthResponse(username, "Dang nhap thanh cong."));
     }
 
