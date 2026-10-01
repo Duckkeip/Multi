@@ -1,16 +1,14 @@
-using System.Net.Sockets;
+using System.Net.WebSockets;
 using ChatProtocol;
 
 namespace ChatServer;
 
 /// <summary>
-/// Boc mot ket noi TCP (1 client) + trang thai cua no (username, phong, da xac thuc chua).
-/// Gui du lieu qua FrameCodec (length-prefix JSON) dinh nghia trong ChatProtocol.
+/// Bọc một WebSocket client cùng trạng thái phiên chat.
 /// </summary>
 public class ClientSession
 {
-    public TcpClient TcpClient { get; }
-    public Stream Stream { get; }
+    public WebSocket Socket { get; }
     public string Username { get; set; } = "";
     public string? CurrentRoom { get; set; }
     public bool IsAuthenticated { get; set; }
@@ -32,20 +30,12 @@ public class ClientSession
     public bool VoiceMicrophoneEnabled { get; set; }
     public bool VoiceCameraEnabled { get; set; }
 
-    // SemaphoreSlim thay vi "lock" thuong, vi FrameCodec.WriteAsync la ham async
-    // (khong the giu "lock" C# qua mot "await").
     private readonly SemaphoreSlim _writeLock = new(1, 1);
 
-    public ClientSession(TcpClient tcpClient, Stream stream)
+    public ClientSession(WebSocket socket, string ipAddress)
     {
-        TcpClient = tcpClient;
-        Stream = stream;
-        
-        // Get client IP address
-        if (tcpClient.Client.RemoteEndPoint is System.Net.IPEndPoint endPoint)
-        {
-            IpAddress = endPoint.Address.ToString();
-        }
+        Socket = socket;
+        IpAddress = ipAddress;
     }
 
     /// <summary>Gui 1 message (type + payload) toi client nay.</summary>
@@ -54,8 +44,8 @@ public class ClientSession
         await _writeLock.WaitAsync();
         try
         {
-            if (TcpClient.Connected)
-                await FrameCodec.WriteAsync(Stream, type, data);
+            if (Socket.State == WebSocketState.Open)
+                await WebSocketEnvelopeCodec.SendAsync(Socket, type, data);
         }
         catch
         {
@@ -69,8 +59,11 @@ public class ClientSession
 
     public void Close()
     {
-        try { Stream.Close(); } catch { /* ignore */ }
-        try { TcpClient.Close(); } catch { /* ignore */ }
+        if (Socket.State == WebSocketState.Open)
+        {
+            try { Socket.Abort(); } catch { /* ignore */ }
+        }
+        try { Socket.Dispose(); } catch { /* ignore */ }
     }
 }
 

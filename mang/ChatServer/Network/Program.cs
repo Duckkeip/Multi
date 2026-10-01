@@ -1,17 +1,15 @@
 using System.Net;
 using System.Net.Mail;
-using System.Net.Sockets;
-using System.Net.Security;
+using System.Net.WebSockets;
 using System.Security.Cryptography;
-using System.Security.Authentication;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using ChatProtocol;
 using QRCoder;
 using System.Collections.Generic; // nếu chưa có
 using System.Linq; // nếu chưa có
-
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 
 namespace ChatServer;
 
@@ -39,11 +37,9 @@ public static class Program
     public static async Task Main(string[] args)
     {
         var config = EnvironmentConfig.Load();
-
-        // Hàm trợ lý đọc ưu tiên: Config local -> Biến môi trường Render
-        string GetEnv(string key) => 
-            !string.IsNullOrWhiteSpace(config.GetValueOrDefault(key, "")) 
-                ? config.GetValueOrDefault(key, "") 
+        string GetEnv(string key) =>
+            !string.IsNullOrWhiteSpace(config.GetValueOrDefault(key, ""))
+                ? config.GetValueOrDefault(key, "")
                 : Environment.GetEnvironmentVariable(key) ?? "";
 
         LiveKitUrl = GetEnv("LIVEKIT_URL").Trim();
@@ -51,146 +47,77 @@ public static class Program
         LiveKitApiSecret = GetEnv("LIVEKIT_API_SECRET").Trim();
         Email = new EmailService(config);
         OtpTokens = new OtpJwtService(GetEnv("JWT_SECRET"));
+
         var mongoUri = GetEnv("MONGODB_URI");
+        if (!string.IsNullOrWhiteSpace(mongoUri))
+        {
+            try
+            {
+                var mongo = new MongoContext(mongoUri);
+                UserStore = new MongoUserStore(mongo.Database);
+                await UserStore.InitializeAsync();
+                MessageStore = new MongoMessageStore(mongo.Database);
+                await MessageStore.InitializeAsync();
+                DirectMessageStore = new MongoDirectMessageStore(mongo.Database);
+                await DirectMessageStore.InitializeAsync();
+                FileStore = new MongoFileStore(mongo.Database);
+                ServerStore = new MongoServerStore(mongo.Database);
+                await ServerStore.InitializeAsync();
+                VoiceSessionStore = new MongoVoiceSessionStore(mongo.Database);
+                await VoiceSessionStore.InitializeAsync();
+                Console.WriteLine("[ChatServer] Đã kết nối MongoDB");
+                Console.WriteLine($"[ChatServer] Tên cơ sở dữ liệu: {mongo.Database.DatabaseNamespace.DatabaseName}");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ChatServer] Khong ket noi duoc MongoDB: {ex}");
+            }
+        }
+        else
+        {
+            Console.Error.WriteLine("[ChatServer] Thieu MONGODB_URI trong .env.");
+        }
 
-if (!string.IsNullOrWhiteSpace(mongoUri))
-{
-    try
-    {
-        var mongo = new MongoContext(mongoUri);
-
-        UserStore = new MongoUserStore(mongo.Database);
-        await UserStore.InitializeAsync();
-
-        MessageStore = new MongoMessageStore(mongo.Database);
-        await MessageStore.InitializeAsync();
-
-        DirectMessageStore = new MongoDirectMessageStore(mongo.Database);
-        await DirectMessageStore.InitializeAsync();
-
-        FileStore = new MongoFileStore(mongo.Database);
-
-        ServerStore = new MongoServerStore(mongo.Database);
-        await ServerStore.InitializeAsync();
-
-        VoiceSessionStore = new MongoVoiceSessionStore(mongo.Database);
-        await VoiceSessionStore.InitializeAsync();
-
-        Console.WriteLine($"[ChatServer] Đã kết nối MongoDB ");
-        Console.WriteLine($"[ChatServer] Tên cơ sở dữ liệu: {mongo.Database.DatabaseNamespace.DatabaseName}");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"[ChatServer] Khong ket noi duoc MongoDB: {ex.Message}");
-    }
-}
-else
-{
-    Console.WriteLine("[ChatServer] Thieu MONGODB_URI trong .env.");
-}
-
-        var aiServiceUrl = GetEnv("AI_SERVICE_URL");
-        Ai = new AiService(aiServiceUrl);   
-
+        Ai = new AiService(GetEnv("AI_SERVICE_URL"));
         var configuredPort = Environment.GetEnvironmentVariable("PORT");
         if (string.IsNullOrWhiteSpace(configuredPort))
             configuredPort = config.GetValueOrDefault("PORT", "");
-        int port = int.TryParse(configuredPort, out var envPort) ? envPort : 5050;
-        if (args.Length > 0 && int.TryParse(args[0], out var p)) port = p;
+        var port = int.TryParse(configuredPort, out var envPort) ? envPort : 5050;
+        if (args.Length > 0 && int.TryParse(args[0], out var argumentPort)) port = argumentPort;
 
-        X509Certificate2? serverCertificate = null;
-        try
+        var builder = WebApplication.CreateBuilder(Array.Empty<string>());
+        builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+        var app = builder.Build();
+        app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
+        app.MapGet("/", () => Results.Ok(new { status = "ok" }));
+        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+        app.Map("/ws", async context =>
         {
-            serverCertificate = LoadTlsCertificate(config);
-        }
-        catch (Exception ex) when (ex is FileNotFoundException or CryptographicException or InvalidOperationException)
-        {
-            Console.Error.WriteLine($"[ChatServer] Không thể khởi động TLS: {ex.Message}");
-            Console.Error.WriteLine("[ChatServer] Hãy kiểm tra TLS_CERT_PATH và TLS_CERT_PASSWORD.");
-            return;
-        }
-
-        var listener = new TcpListener(IPAddress.Any, port);
-        listener.Start();
-        Console.WriteLine($"[ChatServer] Running on port {port}...");
-
-        while (true)
-        {
-            TcpClient tcpClient = await listener.AcceptTcpClientAsync();
-            _ = Task.Run(async () =>
+            if (!context.WebSockets.IsWebSocketRequest)
             {
-                var remoteEndpoint = tcpClient.Client.RemoteEndPoint;
-                Console.WriteLine($"[TCP] Accepted connection from {remoteEndpoint}");
-                try
-                {
-                    var networkStream = tcpClient.GetStream();
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                await context.Response.WriteAsync("WebSocket connection required.");
+                return;
+            }
 
-                    // Đọc 1 byte đầu tiên để kiểm tra Protocol
-                    byte[] headerBuffer = new byte[1];
-                    int bytesRead = await networkStream.ReadAsync(headerBuffer, 0, 1);
+            var socket = await context.WebSockets.AcceptWebSocketAsync();
+            var forwardedFor = context.Request.Headers["X-Forwarded-For"].ToString();
+            var forwardedIp = forwardedFor.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => value.Trim()).FirstOrDefault();
+            var remoteIp = forwardedIp ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var session = new ClientSession(socket, remoteIp);
+            lock (AllClientsLock) AllClients.Add(session);
+            Console.WriteLine($"[WS] Accepted connection from {remoteIp}");
+            await HandleClientAsync(session);
+        });
 
-                    if (bytesRead == 0)
-                    {
-                        tcpClient.Close();
-                        return;
-                    }
-
-                    // 0x16 (22 trong hệ thập phân) là Byte khởi đầu chuẩn của TLS Handshake Client Hello
-                    if (headerBuffer[0] != 0x16)
-                    {
-                        Console.WriteLine($"[TCP] Rejected non-TLS connection from {remoteEndpoint} (first byte 0x{headerBuffer[0]:X2})");
-                        tcpClient.Close();
-                        return;
-                    }
-
-                    // Nếu đúng là TLS Client, tạo Wrapper Stream để khôi phục lại 1 byte đã đọc
-                    var prefixStream = new PrefixStream(networkStream, headerBuffer[0]);
-                    var tlsStream = new SslStream(prefixStream, leaveInnerStreamOpen: false);
-
-                    await tlsStream.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
-                    {
-                        ServerCertificate = serverCertificate,
-                        ClientCertificateRequired = false,
-                        EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
-                        CertificateRevocationCheckMode = X509RevocationMode.NoCheck
-                    });
-
-                    var session = new ClientSession(tcpClient, tlsStream);
-                    lock (AllClientsLock) AllClients.Add(session);
-                    await HandleClientAsync(session);
-                }
-                catch (AuthenticationException ex)
-                {
-                    Console.Error.WriteLine($"[TLS] Handshake failed from {remoteEndpoint}: {ex}");
-                    tcpClient.Close();
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[TCP] Connection failed for {remoteEndpoint}: {ex}");
-                    tcpClient.Close();
-                }
-            });
-        }
+        Console.WriteLine($"[ChatServer] WebSocket server listening on port {port}...");
+        await app.RunAsync();
     }
-
-    private static X509Certificate2 LoadTlsCertificate(IReadOnlyDictionary<string, string> config)
-{
-    // Đặt đường dẫn trực tiếp tới 2 file PEM trên Render (/etc/secrets/server.crt và /etc/secrets/server.key)
-    string crtPath = "/etc/secrets/server.crt";
-    string keyPath = "/etc/secrets/server.key";
-
-    if (!File.Exists(crtPath) || !File.Exists(keyPath))
-    {
-        throw new FileNotFoundException("Khong tim thay file server.crt hoac server.key trong /etc/secrets/");
-    }
-
-    // .NET tự động kết hợp PEM Certificate và Key trên cả Windows lẫn Linux
-    return X509Certificate2.CreateFromPemFile(crtPath, keyPath);
-}
 
     private static async Task HandleClientAsync(ClientSession session)
     {
-        var remoteEp = session.TcpClient.Client.RemoteEndPoint;
+        var remoteEp = session.IpAddress;
         Console.WriteLine($"[+] Ket noi moi tu {remoteEp}");
 
         try
@@ -200,7 +127,7 @@ else
                 Envelope? envelope;
                 try
                 {
-                    envelope = await FrameCodec.ReadAsync(session.Stream);
+                    envelope = await WebSocketEnvelopeCodec.ReceiveAsync(session.Socket);
                 }
                 catch (InvalidDataException ex)
                 {
@@ -212,9 +139,9 @@ else
                 await DispatchAsync(session, envelope);
             }
         }
-        catch (IOException)
+        catch (WebSocketException ex)
         {
-            // Client rot mang dot ngot -> coi nhu disconnect binh thuong
+            Console.WriteLine($"[WS] Connection closed for {remoteEp}: {ex.Message}");
         }
         catch (Exception ex)
         {

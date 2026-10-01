@@ -8,7 +8,7 @@ lưu dữ liệu bằng MongoDB.
 ```text
 ChatTcpWinForms.sln
 ├── ChatProtocol/   # Class Library net10.0, hợp đồng message dùng chung
-├── ChatServer/     # Console app net10.0, TCP server
+├── ChatServer/     # ASP.NET Core net10.0, WebSocket server
 └── ChatClient/     # WinForms app net10.0-windows
 ```
 
@@ -32,17 +32,13 @@ lần trong `ChatProtocol/Protocol.cs`.
 - Lịch sử đăng nhập.
 - Gọi AI bằng lệnh `/ai câu hỏi` nếu cấu hình `AI_SERVICE_URL`.
 
-## Giao thức TLS/TCP
+## Giao thức WebSocket
 
-Kết nối TCP được bọc trong TLS 1.2/1.3; client xác minh chuỗi chứng chỉ và tên máy chủ. Bên trong kênh TLS, mỗi message có dạng length-prefix:
-
-```text
-[4 byte big-endian độ dài][UTF-8 JSON]
-```
-
-JSON chứa `Envelope { type, data }`. Server và client đọc/ghi frame qua
-`FrameCodec`, tránh lỗi phân tách message khi TCP trả dữ liệu thành nhiều gói.
-Giới hạn frame hiện tại là 6 MB; tệp được chia thành chunk 512 KB trước khi gửi.
+Client kết nối tới endpoint `/ws` bằng WebSocket. Trên Render, client dùng `wss://`;
+ở local, client dùng `ws://localhost:5050/ws`. Mỗi WebSocket message chứa một JSON
+`Envelope { type, data }`, nên không cần length-prefix TCP. Giới hạn message là 6 MB;
+tệp được chia thành chunk 512 KB trước khi gửi. Endpoint `/health` trả HTTP 200 để Render
+kiểm tra trạng thái service.
 
 ## Yêu cầu
 
@@ -63,8 +59,6 @@ EMAIL_USER=your-email@gmail.com
 EMAIL_APP_PASSWORD=your-gmail-app-password
 JWT_SECRET=long-random-secret
 AI_SERVICE_URL=https://your-ai-service.example
-TLS_CERT_PATH=C:\certs\chatnet-server.pfx
-TLS_CERT_PASSWORD=your-pfx-password
 LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=your-livekit-api-key
 LIVEKIT_API_SECRET=your-livekit-api-secret
@@ -73,12 +67,10 @@ LIVEKIT_API_SECRET=your-livekit-api-secret
 Các biến:
 
 - `MONGODB_URI`: connection string MongoDB. Nếu URI không nêu tên database, server dùng `multiroom_chat`.
-- `PORT`: cổng TCP, mặc định `5050`. Có thể truyền cổng bằng tham số dòng lệnh.
+- `PORT`: cổng HTTP/WebSocket, mặc định `5050` khi chạy local; Render cấp giá trị runtime.
 - `EMAIL_USER` và `EMAIL_APP_PASSWORD`: dùng để gửi OTP qua Gmail SMTP.
 - `JWT_SECRET`: dùng để ký token OTP có thời hạn; không phải token đăng nhập client.
 - `AI_SERVICE_URL`: URL service có endpoint `POST /generate`, nhận `prompt`, `room`, `username` và trả `{ "reply": "..." }`.
-- `TLS_CERT_PATH`: đường dẫn tuyệt đối tới chứng chỉ máy chủ định dạng PFX, có private key. Đây là bắt buộc; server không khởi động ở chế độ TCP không mã hóa. Giá trị này là **theo từng máy**: máy chạy server phải trỏ tới file PFX có thật trên chính máy đó; không sao chép `.env` hoặc certificate sang máy khác nếu không cần thiết.
-- `TLS_CERT_PASSWORD`: mật khẩu PFX (nếu chứng chỉ có đặt mật khẩu).
 - `LIVEKIT_URL`: WebSocket URL của LiveKit Cloud hoặc LiveKit server.
 - `LIVEKIT_API_KEY` và `LIVEKIT_API_SECRET`: credentials chỉ dùng trên server để ký token; không đặt chúng trong `index.html`.
 
@@ -106,9 +98,10 @@ Không commit `.env` hoặc mật khẩu thật lên Git.
    dotnet run --project .\ChatClient\ChatClient.csproj
    ```
 
-Client mặc định kết nối TLS tới server ở `localhost:5050` theo cấu hình trong màn
-hình đăng nhập. Chứng chỉ phải đáng tin cậy và có SAN khớp hostname/IP mà client nhập. Chạy server không có MongoDB vẫn mở cổng, nhưng các tính năng cần
-lưu trữ sẽ không hoạt động.
+Client mặc định kết nối `ws://localhost:5050/ws`. Với Render, nhập hostname service
+vào trường máy chủ và `443` vào trường cổng; client sẽ tự dùng `wss://<hostname>:443/ws`.
+Đặt health check path của Render thành `/health`. Chạy server không có MongoDB vẫn mở
+endpoint, nhưng các tính năng cần lưu trữ sẽ không hoạt động.
 
 ## Dữ liệu MongoDB
 

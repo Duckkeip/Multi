@@ -1,13 +1,11 @@
 using System.Buffers.Binary;
+using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 namespace ChatProtocol;
 
-// TCP la mot stream, khong tu bao dau/cuoi 1 message. Moi "phong bi" (envelope) duoc
-// dong khung theo kieu length-prefix: [4 byte big-endian = do dai than message][UTF-8 JSON].
-// Day la ky thuat framing pho bien khi lam viec truc tiep voi socket TCP (khac voi
-// giao thuc newline-delimited don gian hon nhung de vo nghia neu noi dung co chua '\n',
-// vi du sau nay gui van ban nhieu dong hoac du lieu nhi phan).
+// Envelope là hợp đồng JSON dùng chung cho client và server. WebSocket giữ ranh giới
+// message; FrameCodec bên dưới vẫn hỗ trợ length-prefix cho các công cụ TCP cũ.
 public record Envelope(string Type, JsonElement Data);
 
 // ==== Cac kieu du lieu (payload) cho tung loai message ====
@@ -299,6 +297,57 @@ public static class FrameCodec
             read += n;
         }
         return buffer;
+    }
+}
+
+public static class WebSocketEnvelopeCodec
+{
+    private const int ReceiveBufferBytes = 16 * 1024;
+
+    public static async Task SendAsync(WebSocket socket, string type, object? data, CancellationToken cancellationToken = default)
+    {
+        var payload = JsonSerializer.SerializeToUtf8Bytes(new { type, data }, FrameCodec.Options);
+        if (payload.Length > FrameCodec.MaxFrameBytes)
+            throw new InvalidDataException("Goi tin vuot qua 6 MB.");
+
+        await socket.SendAsync(payload, WebSocketMessageType.Text, true, cancellationToken);
+    }
+
+    public static async Task<Envelope?> ReceiveAsync(WebSocket socket, CancellationToken cancellationToken = default)
+    {
+        using var payload = new MemoryStream();
+        var buffer = new byte[ReceiveBufferBytes];
+        WebSocketMessageType? messageType = null;
+
+        while (true)
+        {
+            var result = await socket.ReceiveAsync(buffer.AsMemory(), cancellationToken);
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                if (socket.State == WebSocketState.CloseReceived)
+                {
+                    await socket.CloseOutputAsync(
+                        socket.CloseStatus ?? WebSocketCloseStatus.NormalClosure,
+                        socket.CloseStatusDescription,
+                        cancellationToken);
+                }
+                return null;
+            }
+            if (result.MessageType != WebSocketMessageType.Text)
+                throw new InvalidDataException("Chi chap nhan WebSocket message dang text.");
+
+            messageType ??= result.MessageType;
+            if (messageType != result.MessageType)
+                throw new InvalidDataException("WebSocket message thay doi kieu giua cac fragment.");
+            if (payload.Length + result.Count > FrameCodec.MaxFrameBytes)
+                throw new InvalidDataException("Goi tin vuot qua 6 MB.");
+
+            payload.Write(buffer, 0, result.Count);
+            if (result.EndOfMessage) break;
+        }
+
+        if (payload.Length == 0) throw new InvalidDataException("WebSocket message rong.");
+        return JsonSerializer.Deserialize<Envelope>(payload.GetBuffer().AsSpan(0, (int)payload.Length), FrameCodec.Options);
     }
 }
 

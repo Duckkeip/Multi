@@ -12,14 +12,12 @@ COPY . .
 WORKDIR "/src/ChatServer"
 RUN dotnet publish "ChatServer.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
-# 2. Runtime stage nhẹ (Alpine)
-FROM mcr.microsoft.com/dotnet/runtime:10.0-alpine AS final
+# 2. ASP.NET Core runtime cho Kestrel và WebSocket
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
-# Mở cổng 5050 cho ChatServer
+# Cổng local mặc định; Render cung cấp PORT khi deploy
 EXPOSE 5050
-ENV PORT=5050
-
 
 ENTRYPOINT ["dotnet", "ChatServer.dll"]

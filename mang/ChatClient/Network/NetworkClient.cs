@@ -1,66 +1,58 @@
-using System.Net.Sockets;
-using System.Net.Security;
-using System.Security.Authentication;
-using System.Security.Cryptography.X509Certificates;
+using System.Net;
+using System.Net.WebSockets;
 using ChatProtocol;
-using System.Text;
-using System.Text.Json;
 
 namespace ChatClient;
 
 /// <summary>
-/// Boc mot ket noi TCP toi server, gui/nhan qua FrameCodec (length-prefix JSON).
-/// UI (WinForms) khong dung truc tiep Socket/Stream, ma dang ky event MessageReceived/
+/// Bọc một kết nối WebSocket tới server và gửi/nhận JSON Envelope.
+/// UI (WinForms) không dùng trực tiếp WebSocket, mà đăng ký event MessageReceived/
 /// Disconnected roi nhan Envelope qua do.
 /// </summary>
 public class NetworkClient
 {
-    private TcpClient? _tcpClient;
-    private Stream? _stream;
+    private ClientWebSocket? _socket;
     private CancellationTokenSource? _cts;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
 
     public event Action<Envelope>? MessageReceived;
     public event Action<string>? Disconnected;
 
-    public bool IsConnected => _tcpClient?.Connected ?? false;
+    public bool IsConnected => _socket?.State == WebSocketState.Open;
 
     public async Task ConnectAsync(string host, int port)
     {
-        _tcpClient = new TcpClient();
-        await _tcpClient.ConnectAsync(host, port);
-        var tlsStream = new SslStream(_tcpClient.GetStream(), leaveInnerStreamOpen: false);
+        var scheme = IsLoopbackHost(host) ? "ws" : "wss";
+        var endpoint = new UriBuilder(scheme, host, port, "/ws").Uri;
+        _socket = new ClientWebSocket();
+        _cts = new CancellationTokenSource();
         try
         {
-            await tlsStream.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
-            {
-                TargetHost = host,
-                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
-                CertificateRevocationCheckMode = X509RevocationMode.Online
-            });
-            _stream = tlsStream;
+            await _socket.ConnectAsync(endpoint, _cts.Token);
         }
         catch
         {
-            tlsStream.Dispose();
-            _tcpClient.Close();
+            Close();
             throw;
         }
-        _cts = new CancellationTokenSource();
 
         // Vong lap doc chay nen (khong block UI thread) - vi vay cac noi nhan du lieu
         // phai Invoke ve UI thread truoc khi dung cham vao Control (xem ChatForm).
         _ = Task.Run(() => ReadLoopAsync(_cts.Token));
     }
 
+    private static bool IsLoopbackHost(string host) =>
+        string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+        IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
+
     /// <summary>Gui bat dong bo - dung trong code da la async (man hinh dang nhap).</summary>
     public async Task SendAsync(string type, object? data = null)
     {
-        if (_stream == null) return;
+        if (_socket?.State != WebSocketState.Open) return;
         await _writeLock.WaitAsync();
         try
         {
-            await FrameCodec.WriteAsync(_stream, type, data);
+            await WebSocketEnvelopeCodec.SendAsync(_socket, type, data, _cts?.Token ?? CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -84,7 +76,7 @@ public class NetworkClient
                 Envelope? envelope;
                 try
                 {
-                    envelope = await FrameCodec.ReadAsync(_stream!, token);
+                    envelope = await WebSocketEnvelopeCodec.ReceiveAsync(_socket!, token);
                 }
                 catch (InvalidDataException ex)
                 {
@@ -111,7 +103,7 @@ public class NetworkClient
     public void Close()
     {
         _cts?.Cancel();
-        try { _stream?.Close(); } catch { /* ignore */ }
-        try { _tcpClient?.Close(); } catch { /* ignore */ }
+        try { _socket?.Abort(); } catch { /* ignore */ }
+        _socket?.Dispose();
     }
 }
