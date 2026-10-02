@@ -46,6 +46,7 @@ public static class Program
         LiveKitApiKey = GetEnv("LIVEKIT_API_KEY").Trim();
         LiveKitApiSecret = GetEnv("LIVEKIT_API_SECRET").Trim();
         Email = new EmailService(config);
+        Console.WriteLine($"[ChatServer] Email OTP configured: {Email.IsConfigured}");
         OtpTokens = new OtpJwtService(GetEnv("JWT_SECRET"));
 
         var mongoUri = GetEnv("MONGODB_URI");
@@ -420,12 +421,14 @@ public static class Program
             await session.SendAsync("password-reset-otp-sent",
                 new PasswordResetOtpSentResponse("Ma OTP da duoc gui toi email da dang ky."));
         }
-        catch (SmtpException)
+        catch (SmtpException ex)
         {
+            Console.Error.WriteLine($"[PasswordReset] Gui OTP that bai cho '{email}': {ex}");
             await session.SendAsync("error", new ErrorResponse("Gmail khong gui duoc email. Hay kiem tra EMAIL_USER va EMAIL_APP_PASSWORD."));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Console.Error.WriteLine($"[PasswordReset] Gui OTP that bai cho '{email}': {ex}");
             await session.SendAsync("error", new ErrorResponse("Khong the gui OTP luc nay. Hay thu lai sau."));
         }
     }
@@ -1297,7 +1300,7 @@ public static class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Register] Gui OTP that bai cho '{email}': {ex.Message}");
+            Console.Error.WriteLine($"[Register] Gui OTP that bai cho '{email}': {ex}");
             await session.SendAsync("error", new ErrorResponse($"Khong gui duoc email OTP: {ex.Message}"));
         }
     }
@@ -1406,7 +1409,6 @@ public static class Program
         session.LoginTime = DateTime.UtcNow;
         session.LastActive = DateTime.UtcNow;
 
-        // Add session to user's session list
         var userSession = new UserSession
         {
             SessionId = session.SessionId,
@@ -1417,7 +1419,6 @@ public static class Program
         };
         await UserStore.AddSessionAsync(username, userSession);
 
-        // Add login history
         var loginEntry = new LoginHistoryEntry
         {
             LoginTime = session.LoginTime,

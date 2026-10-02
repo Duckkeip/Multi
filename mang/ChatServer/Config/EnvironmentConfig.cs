@@ -23,7 +23,20 @@ public static class EnvironmentConfig
             }
         }
 
-        foreach (var key in values.Keys.ToList())
+        var environmentKeys = new[]
+        {
+            "MONGODB_URI",
+            "PORT",
+            "EMAIL_USER",
+            "EMAIL_APP_PASSWORD",
+            "JWT_SECRET",
+            "AI_SERVICE_URL",
+            "LIVEKIT_URL",
+            "LIVEKIT_API_KEY",
+            "LIVEKIT_API_SECRET"
+        };
+
+        foreach (var key in environmentKeys)
         {
             var environmentValue = Environment.GetEnvironmentVariable(key);
             if (!string.IsNullOrWhiteSpace(environmentValue))
