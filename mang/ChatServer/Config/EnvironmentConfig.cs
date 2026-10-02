@@ -27,8 +27,8 @@ public static class EnvironmentConfig
         {
             "MONGODB_URI",
             "PORT",
-            "EMAIL_USER",
-            "EMAIL_APP_PASSWORD",
+            "RESEND_API_KEY",
+            "EMAIL_FROM",
             "JWT_SECRET",
             "AI_SERVICE_URL",
             "LIVEKIT_URL",

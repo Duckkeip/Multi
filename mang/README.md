@@ -45,7 +45,7 @@ kiểm tra trạng thái service.
 - Windows.
 - .NET 10 SDK.
 - MongoDB nếu muốn dùng tài khoản, lịch sử chat, DM offline, file và tính năng bảo mật.
-- Gmail SMTP App Password nếu muốn dùng OTP email.
+- Resend account và verified sender domain nếu muốn dùng OTP email.
 
 ## Cấu hình server
 
@@ -55,8 +55,8 @@ Server đọc file `.env` trong thư mục `ChatServer` hoặc biến môi trư�
 ```env
 MONGODB_URI=mongodb://localhost:27017/chatnet
 PORT=5050
-EMAIL_USER=your-email@gmail.com
-EMAIL_APP_PASSWORD=your-gmail-app-password
+RESEND_API_KEY=re_your_api_key
+EMAIL_FROM=RE:CHAT <otp@your-verified-domain.com>
 JWT_SECRET=long-random-secret
 AI_SERVICE_URL=https://your-ai-service.example
 LIVEKIT_URL=wss://your-project.livekit.cloud
@@ -68,7 +68,8 @@ Các biến:
 
 - `MONGODB_URI`: connection string MongoDB. Nếu URI không nêu tên database, server dùng `multiroom_chat`.
 - `PORT`: cổng HTTP/WebSocket, mặc định `5050` khi chạy local; Render cấp giá trị runtime.
-- `EMAIL_USER` và `EMAIL_APP_PASSWORD`: dùng để gửi OTP qua Gmail SMTP.
+- `RESEND_API_KEY`: API key của Resend; lưu trong Render Environment, không commit vào Git.
+- `EMAIL_FROM`: địa chỉ người gửi thuộc domain đã xác minh trong Resend, ví dụ `RE:CHAT <otp@example.com>`.
 - `JWT_SECRET`: dùng để ký token OTP có thời hạn; không phải token đăng nhập client.
 - `AI_SERVICE_URL`: URL service có endpoint `POST /generate`, nhận `prompt`, `room`, `username` và trả `{ "reply": "..." }`.
 - `LIVEKIT_URL`: WebSocket URL của LiveKit Cloud hoặc LiveKit server.

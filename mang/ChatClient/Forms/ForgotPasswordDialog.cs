@@ -90,7 +90,9 @@ internal sealed class ForgotPasswordDialog : Form
         {
             if (envelope.Type is "password-reset-otp-sent" or "error") response.TrySetResult(envelope);
         }
+        void OnDisconnected(string message) => response.TrySetException(new IOException(message));
         network.MessageReceived += OnMessage;
+        network.Disconnected += OnDisconnected;
         try
         {
             await network.ConnectAsync(_host, _port);
@@ -121,6 +123,7 @@ internal sealed class ForgotPasswordDialog : Form
         finally
         {
             network.MessageReceived -= OnMessage;
+            network.Disconnected -= OnDisconnected;
             if (_sendOtp.Enabled) SetBusy(false, _status.Text);
         }
     }

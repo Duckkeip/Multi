@@ -295,7 +295,9 @@ public class LoginForm : Form
         var network = _registrationNetwork ??= new NetworkClient();
         var response = new TaskCompletionSource<Envelope>(TaskCreationOptions.RunContinuationsAsynchronously);
         void OnMessage(Envelope envelope) { if (envelope.Type is "register-otp-sent" or "error") response.TrySetResult(envelope); }
+        void OnDisconnected(string message) => response.TrySetException(new IOException(message));
         network.MessageReceived += OnMessage;
+        network.Disconnected += OnDisconnected;
         try
         {
             if (!network.IsConnected)
@@ -326,6 +328,7 @@ public class LoginForm : Form
         finally
         {
             network.MessageReceived -= OnMessage;
+            network.Disconnected -= OnDisconnected;
             if (!_txtRegisterOtp.Enabled) SetRegisterBusy(false, _lblRegisterStatus.Text);
             else if (_registrationNetwork is not null) _btnRegisterResend.Enabled = true;
         }
@@ -339,7 +342,9 @@ public class LoginForm : Form
         SetRegisterBusy(true, "Đang xác nhận...");
         var response = new TaskCompletionSource<Envelope>(TaskCreationOptions.RunContinuationsAsynchronously);
         void OnMessage(Envelope envelope) { if (envelope.Type is "auth" or "error") response.TrySetResult(envelope); }
+        void OnDisconnected(string message) => response.TrySetException(new IOException(message));
         network.MessageReceived += OnMessage;
+        network.Disconnected += OnDisconnected;
         try
         {
             await network.SendAsync("register-verify", new VerifyRegistrationRequest(_txtRegisterOtp.Text.Trim()));
@@ -351,7 +356,12 @@ public class LoginForm : Form
             OpenChat(network, _txtRegisterUsername.Text.Trim());
         }
         catch (Exception ex) { SetRegisterError($"Không thể xác nhận: {ex.Message}"); }
-        finally { network.MessageReceived -= OnMessage; if (_registrationNetwork is not null) SetRegisterBusy(false, _lblRegisterStatus.Text); }
+        finally
+        {
+            network.MessageReceived -= OnMessage;
+            network.Disconnected -= OnDisconnected;
+            if (_registrationNetwork is not null) SetRegisterBusy(false, _lblRegisterStatus.Text);
+        }
     }
 
     private void SetRegisterBusy(bool busy, string message)

@@ -1,29 +1,29 @@
-using System.Net;
-using System.Net.Mail;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 
 namespace ChatServer;
 
 public sealed class EmailService
 {
-    private readonly string _username;
-    private readonly string _appPassword;
+    private static readonly HttpClient HttpClient = new();
+    private readonly string _apiKey;
+    private readonly string _sender;
 
     public EmailService(IReadOnlyDictionary<string, string> config)
     {
-        _username = config.GetValueOrDefault("EMAIL_USER", "");
-        _appPassword = config
-            .GetValueOrDefault("EMAIL_APP_PASSWORD", "")
-            .Replace(" ", "", StringComparison.Ordinal);
+        _apiKey = config.GetValueOrDefault("RESEND_API_KEY", "").Trim();
+        _sender = config.GetValueOrDefault("EMAIL_FROM", "").Trim();
     }
 
     public bool IsConfigured =>
-        _username.Length > 0 && _appPassword.Length > 0;
+        _apiKey.Length > 0 && _sender.Length > 0;
 
     public async Task SendOtpAsync(string recipient, string otp)
     {
         if (!IsConfigured)
             throw new InvalidOperationException(
-                "Server chua cau hinh EMAIL_USER va EMAIL_APP_PASSWORD trong .env."
+                "Server chua cau hinh RESEND_API_KEY va EMAIL_FROM."
             );
 
         var htmlBody = $@"
@@ -224,23 +224,28 @@ public sealed class EmailService
 </body>
 </html>";
 
-        using var message = new MailMessage(_username, recipient)
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.resend.com/emails");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(new
+            {
+                from = _sender,
+                to = new[] { recipient },
+                subject = "RE:CHAT - Mã xác nhận bảo mật",
+                html = htmlBody
+            }),
+            Encoding.UTF8,
+            "application/json");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        using var response = await HttpClient.SendAsync(request, timeout.Token);
+        if (!response.IsSuccessStatusCode)
         {
-            Subject = "RE:CHAT - Mã xác nhận bảo mật",
-            Body = htmlBody,
-            IsBodyHtml = true
-        };
-
-        using var smtp = new SmtpClient("smtp.gmail.com", 587)
-        {
-            EnableSsl = true,
-            Credentials = new NetworkCredential(
-                _username,
-                _appPassword
-            )
-        };
-
-        await smtp.SendMailAsync(message);
+            var responseBody = await response.Content.ReadAsStringAsync(timeout.Token);
+            throw new HttpRequestException(
+                $"Resend API returned HTTP {(int)response.StatusCode}: {responseBody}",
+                null,
+                response.StatusCode);
+        }
     }
 }
 
