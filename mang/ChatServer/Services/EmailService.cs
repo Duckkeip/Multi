@@ -9,24 +9,102 @@ public sealed class EmailService
     private static readonly HttpClient HttpClient = new();
     private readonly string _apiKey;
     private readonly string _sender;
+    private readonly string _scriptUrl;
+    private readonly string _scriptSecret;
 
     public EmailService(IReadOnlyDictionary<string, string> config)
     {
         _apiKey = config.GetValueOrDefault("RESEND_API_KEY", "").Trim();
         _sender = config.GetValueOrDefault("EMAIL_FROM", "").Trim();
+        _scriptUrl = config.GetValueOrDefault("EMAIL_SCRIPT_URL", "").Trim();
+        _scriptSecret = config.GetValueOrDefault("EMAIL_SCRIPT_SECRET", "").Trim();
     }
 
     public bool IsConfigured =>
-        _apiKey.Length > 0 && _sender.Length > 0;
+        (_scriptUrl.Length > 0 && _scriptSecret.Length > 0) ||
+        (_apiKey.Length > 0 && _sender.Length > 0);
 
     public async Task SendOtpAsync(string recipient, string otp)
     {
-        if (!IsConfigured)
-            throw new InvalidOperationException(
-                "Server chua cau hinh RESEND_API_KEY va EMAIL_FROM."
-            );
+        var htmlBody = BuildEmailHtml(otp);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
 
-        var htmlBody = $@"
+        if (_scriptUrl.Length > 0 && _scriptSecret.Length > 0)
+        {
+            await SendWithAppsScriptAsync(recipient, htmlBody, timeout.Token);
+            return;
+        }
+
+        if (_apiKey.Length > 0 && _sender.Length > 0)
+        {
+            await SendWithResendAsync(recipient, htmlBody, timeout.Token);
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "Cau hinh EMAIL_SCRIPT_URL va EMAIL_SCRIPT_SECRET, hoac RESEND_API_KEY va EMAIL_FROM."
+        );
+    }
+
+    private async Task SendWithAppsScriptAsync(string recipient, string htmlBody, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, _scriptUrl);
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(new
+            {
+                secret = _scriptSecret,
+                to = recipient,
+                subject = "RE:CHAT - Mã xác nhận bảo mật",
+                html = htmlBody
+            }),
+            Encoding.UTF8,
+            "application/json");
+
+        using var response = await HttpClient.SendAsync(request, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"Apps Script returned HTTP {(int)response.StatusCode}: {responseBody}");
+
+        using var document = JsonDocument.Parse(responseBody);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("ok", out var ok) || !ok.GetBoolean())
+        {
+            var error = root.TryGetProperty("error", out var errorValue)
+                ? errorValue.GetString()
+                : "Unknown Apps Script error.";
+            throw new HttpRequestException($"Apps Script failed to send email: {error}");
+        }
+    }
+
+    private async Task SendWithResendAsync(string recipient, string htmlBody, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.resend.com/emails");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(new
+            {
+                from = _sender,
+                to = new[] { recipient },
+                subject = "RE:CHAT - Mã xác nhận bảo mật",
+                html = htmlBody
+            }),
+            Encoding.UTF8,
+            "application/json");
+
+        using var response = await HttpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException(
+                $"Resend API returned HTTP {(int)response.StatusCode}: {responseBody}",
+                null,
+                response.StatusCode);
+        }
+    }
+
+    private static string BuildEmailHtml(string otp)
+    {
+        return $@"
 <!DOCTYPE html>
 <html lang=""vi"">
 <head>
@@ -223,29 +301,6 @@ public sealed class EmailService
 
 </body>
 </html>";
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.resend.com/emails");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
-        request.Content = new StringContent(
-            JsonSerializer.Serialize(new
-            {
-                from = _sender,
-                to = new[] { recipient },
-                subject = "RE:CHAT - Mã xác nhận bảo mật",
-                html = htmlBody
-            }),
-            Encoding.UTF8,
-            "application/json");
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-        using var response = await HttpClient.SendAsync(request, timeout.Token);
-        if (!response.IsSuccessStatusCode)
-        {
-            var responseBody = await response.Content.ReadAsStringAsync(timeout.Token);
-            throw new HttpRequestException(
-                $"Resend API returned HTTP {(int)response.StatusCode}: {responseBody}",
-                null,
-                response.StatusCode);
-        }
     }
 }
 

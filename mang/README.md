@@ -45,7 +45,7 @@ kiểm tra trạng thái service.
 - Windows.
 - .NET 10 SDK.
 - MongoDB nếu muốn dùng tài khoản, lịch sử chat, DM offline, file và tính năng bảo mật.
-- Resend account và verified sender domain nếu muốn dùng OTP email.
+- Google account for Apps Script OTP email, or a Resend account with a verified sender domain.
 
 ## Cấu hình server
 
@@ -55,8 +55,8 @@ Server đọc file `.env` trong thư mục `ChatServer` hoặc biến môi trư�
 ```env
 MONGODB_URI=mongodb://localhost:27017/chatnet
 PORT=5050
-RESEND_API_KEY=re_your_api_key
-EMAIL_FROM=RE:CHAT <otp@your-verified-domain.com>
+EMAIL_SCRIPT_URL=https://script.google.com/macros/s/your-deployment-id/exec
+EMAIL_SCRIPT_SECRET=long-random-shared-secret
 JWT_SECRET=long-random-secret
 AI_SERVICE_URL=https://your-ai-service.example
 LIVEKIT_URL=wss://your-project.livekit.cloud
@@ -68,14 +68,22 @@ Các biến:
 
 - `MONGODB_URI`: connection string MongoDB. Nếu URI không nêu tên database, server dùng `multiroom_chat`.
 - `PORT`: cổng HTTP/WebSocket, mặc định `5050` khi chạy local; Render cấp giá trị runtime.
-- `RESEND_API_KEY`: API key của Resend; lưu trong Render Environment, không commit vào Git.
-- `EMAIL_FROM`: địa chỉ người gửi thuộc domain đã xác minh trong Resend, ví dụ `RE:CHAT <otp@example.com>`.
+- `EMAIL_SCRIPT_URL` và `EMAIL_SCRIPT_SECRET`: URL `/exec` của Apps Script Web App và shared secret giống giá trị trong Script Properties. Apps Script được ưu tiên nếu cả hai biến này có mặt.
+- `RESEND_API_KEY` và `EMAIL_FROM`: phương án Resend dự phòng; sender phải thuộc domain đã xác minh.
 - `JWT_SECRET`: dùng để ký token OTP có thời hạn; không phải token đăng nhập client.
 - `AI_SERVICE_URL`: URL service có endpoint `POST /generate`, nhận `prompt`, `room`, `username` và trả `{ "reply": "..." }`.
 - `LIVEKIT_URL`: WebSocket URL của LiveKit Cloud hoặc LiveKit server.
 - `LIVEKIT_API_KEY` và `LIVEKIT_API_SECRET`: credentials chỉ dùng trên server để ký token; không đặt chúng trong `index.html`.
 
 Không commit `.env` hoặc mật khẩu thật lên Git.
+
+### Gửi OTP miễn phí bằng Google Apps Script
+
+1. Mở `ChatServer/AppsScript/Code.gs` trong Apps Script và dán nội dung vào một project mới.
+2. Trong Project Settings → Script Properties, thêm `EMAIL_SCRIPT_SECRET` với một secret ngẫu nhiên dài.
+3. Deploy → New deployment → Web app; chọn Execute as me và quyền truy cập Anyone. Cấp quyền gửi email cho project khi Google yêu cầu.
+4. Copy URL kết thúc bằng `/exec`. Trong Render Environment, đặt `EMAIL_SCRIPT_URL` thành URL đó và `EMAIL_SCRIPT_SECRET` thành cùng secret.
+5. Deploy lại server. Với tài khoản Gmail cá nhân, MailApp có quota hiện tại 100 người nhận/ngày; quota Google có thể thay đổi. Không chia sẻ URL secret hoặc secret.
 
 ## Chạy
 

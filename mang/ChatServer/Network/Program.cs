@@ -409,7 +409,7 @@ public static class Program
         }
         if (!Email.IsConfigured)
         {
-            await session.SendAsync("error", new ErrorResponse("Server chua cau hinh EMAIL_USER va EMAIL_APP_PASSWORD."));
+            await session.SendAsync("error", new ErrorResponse("Chua cau hinh EMAIL_SCRIPT_URL/EMAIL_SCRIPT_SECRET hoac Resend."));
             return;
         }
 
@@ -421,10 +421,10 @@ public static class Program
             await session.SendAsync("password-reset-otp-sent",
                 new PasswordResetOtpSentResponse("Ma OTP da duoc gui toi email da dang ky."));
         }
-        catch (SmtpException ex)
+        catch (HttpRequestException ex)
         {
             Console.Error.WriteLine($"[PasswordReset] Gui OTP that bai cho '{email}': {ex}");
-            await session.SendAsync("error", new ErrorResponse("Gmail khong gui duoc email. Hay kiem tra EMAIL_USER va EMAIL_APP_PASSWORD."));
+            await session.SendAsync("error", new ErrorResponse("Dich vu email khong gui duoc OTP. Hay kiem tra cau hinh email gateway."));
         }
         catch (Exception ex)
         {
@@ -462,7 +462,7 @@ public static class Program
         if (!await TryConsumeRateLimitAsync(session, "password-change-otp", email, 3, TimeSpan.FromMinutes(15))) return;
         if (!Email.IsConfigured)
         {
-            await session.SendAsync("error", new ErrorResponse("Server chua cau hinh email Gmail."));
+            await session.SendAsync("error", new ErrorResponse("Chua cau hinh EMAIL_SCRIPT_URL/EMAIL_SCRIPT_SECRET hoac Resend."));
             return;
         }
 
@@ -1283,7 +1283,7 @@ public static class Program
 
         if (!Email.IsConfigured)
         {
-            await session.SendAsync("error", new ErrorResponse("Server chua cau hinh EMAIL_USER va EMAIL_APP_PASSWORD."));
+            await session.SendAsync("error", new ErrorResponse("Chua cau hinh EMAIL_SCRIPT_URL/EMAIL_SCRIPT_SECRET hoac Resend."));
             return;
         }
 
