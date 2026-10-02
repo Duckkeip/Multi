@@ -4,9 +4,8 @@ namespace ChatClient;
 
 public class LoginForm : Form
 {
-    // Development certificate của .NET mặc định cấp cho "localhost", không phải địa chỉ IP 127.0.0.1.
-    private readonly TextBox _txtHost = new() { Text = "localhost" };
-    private readonly TextBox _txtPort = new() { Text = "5050" };
+    private readonly TextBox _txtHost = new() { Text = "multi-hmz5.onrender.com" };
+    private readonly TextBox _txtPort = new() { Text = "443" };
     private readonly TextBox _txtUsername = new();
     private readonly TextBox _txtPassword = new() { UseSystemPasswordChar = true };
     private readonly Button _btnConnect = new() { Text = "Vào trò chuyện" };

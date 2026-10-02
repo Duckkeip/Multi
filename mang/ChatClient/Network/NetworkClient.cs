@@ -22,6 +22,13 @@ public class NetworkClient
 
     public async Task ConnectAsync(string host, int port)
     {
+        host = host.Trim();
+        if (Uri.TryCreate(host, UriKind.Absolute, out var suppliedUri) &&
+            suppliedUri.Scheme is "http" or "https" or "ws" or "wss")
+        {
+            host = suppliedUri.Host;
+        }
+
         var scheme = IsLoopbackHost(host) ? "ws" : "wss";
         var endpoint = new UriBuilder(scheme, host, port, "/ws").Uri;
         _socket = new ClientWebSocket();
@@ -30,10 +37,10 @@ public class NetworkClient
         {
             await _socket.ConnectAsync(endpoint, _cts.Token);
         }
-        catch
+        catch (Exception ex)
         {
             Close();
-            throw;
+            throw new InvalidOperationException($"Không thể kết nối WebSocket tới {endpoint}.", ex);
         }
 
         // Vong lap doc chay nen (khong block UI thread) - vi vay cac noi nhan du lieu
