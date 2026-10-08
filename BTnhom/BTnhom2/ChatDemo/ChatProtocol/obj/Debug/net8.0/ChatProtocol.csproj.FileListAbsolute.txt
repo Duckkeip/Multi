@@ -1,0 +1,12 @@
+E:\git\Multi\BTnhom\BTnhom2\WebSocket\ChatDemo\ChatProtocol\bin\Debug\net8.0\ChatProtocol.deps.json
+E:\git\Multi\BTnhom\BTnhom2\WebSocket\ChatDemo\ChatProtocol\bin\Debug\net8.0\ChatProtocol.dll
+E:\git\Multi\BTnhom\BTnhom2\WebSocket\ChatDemo\ChatProtocol\bin\Debug\net8.0\ChatProtocol.pdb
+E:\git\Multi\BTnhom\BTnhom2\WebSocket\ChatDemo\ChatProtocol\obj\Debug\net8.0\ChatProtocol.GeneratedMSBuildEditorConfig.editorconfig
+E:\git\Multi\BTnhom\BTnhom2\WebSocket\ChatDemo\ChatProtocol\obj\Debug\net8.0\ChatProtocol.AssemblyInfoInputs.cache
+E:\git\Multi\BTnhom\BTnhom2\WebSocket\ChatDemo\ChatProtocol\obj\Debug\net8.0\ChatProtocol.AssemblyInfo.cs
+E:\git\Multi\BTnhom\BTnhom2\WebSocket\ChatDemo\ChatProtocol\obj\Debug\net8.0\ChatProtocol.csproj.CoreCompileInputs.cache
+E:\git\Multi\BTnhom\BTnhom2\WebSocket\ChatDemo\ChatProtocol\obj\Debug\net8.0\ChatProtocol.sourcelink.json
+E:\git\Multi\BTnhom\BTnhom2\WebSocket\ChatDemo\ChatProtocol\obj\Debug\net8.0\ChatProtocol.dll
+E:\git\Multi\BTnhom\BTnhom2\WebSocket\ChatDemo\ChatProtocol\obj\Debug\net8.0\refint\ChatProtocol.dll
+E:\git\Multi\BTnhom\BTnhom2\WebSocket\ChatDemo\ChatProtocol\obj\Debug\net8.0\ChatProtocol.pdb
+E:\git\Multi\BTnhom\BTnhom2\WebSocket\ChatDemo\ChatProtocol\obj\Debug\net8.0\ref\ChatProtocol.dll

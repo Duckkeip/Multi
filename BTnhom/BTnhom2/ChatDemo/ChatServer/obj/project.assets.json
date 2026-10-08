@@ -1,0 +1,100 @@
+{
+  "version": 3,
+  "targets": {
+    "net8.0": {
+      "ChatProtocol/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "compile": {
+          "bin/placeholder/ChatProtocol.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/ChatProtocol.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "ChatProtocol/1.0.0": {
+      "type": "project",
+      "path": "../ChatProtocol/ChatProtocol.csproj",
+      "msbuildProject": "../ChatProtocol/ChatProtocol.csproj"
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net8.0": [
+      "ChatProtocol >= 1.0.0"
+    ]
+  },
+  "packageFolders": {
+    "C:\\Users\\Admin\\.nuget\\packages\\": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "E:\\git\\Multi\\BTnhom\\BTnhom2\\WebSocket\\ChatDemo\\ChatServer\\ChatServer.csproj",
+      "projectName": "ChatServer",
+      "projectPath": "E:\\git\\Multi\\BTnhom\\BTnhom2\\WebSocket\\ChatDemo\\ChatServer\\ChatServer.csproj",
+      "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
+      "outputPath": "E:\\git\\Multi\\BTnhom\\BTnhom2\\WebSocket\\ChatDemo\\ChatServer\\obj\\",
+      "projectStyle": "PackageReference",
+      "configFilePaths": [
+        "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+      ],
+      "originalTargetFrameworks": [
+        "net8.0"
+      ],
+      "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "projectReferences": {
+            "E:\\git\\Multi\\BTnhom\\BTnhom2\\WebSocket\\ChatDemo\\ChatProtocol\\ChatProtocol.csproj": {
+              "projectPath": "E:\\git\\Multi\\BTnhom\\BTnhom2\\WebSocket\\ChatDemo\\ChatProtocol\\ChatProtocol.csproj"
+            }
+          }
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "10.0.200"
+    },
+    "frameworks": {
+      "net8.0": {
+        "targetAlias": "net8.0",
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "frameworkReferences": {
+          "Microsoft.AspNetCore.App": {
+            "privateAssets": "none"
+          },
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          }
+        },
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.202/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}

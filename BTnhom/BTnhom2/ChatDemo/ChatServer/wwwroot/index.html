@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi Chat Room - WebSocket demo</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; background: #f4f6fa; color: #222; }
+  header { background: #002060; color: #fff; padding: 12px 20px; }
+  header span { font-family: Consolas, monospace; opacity: .85; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; max-width: 1200px; margin: 0 auto; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  section { background: #fff; border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  h2 { margin: 0 0 10px; font-size: 16px; color: #002060; }
+  input, button { font-size: 15px; padding: 7px 10px; }
+  input { border: 1px solid #b8c4d8; border-radius: 6px; }
+  button { background: #4f81bd; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+  button:disabled { background: #aab; cursor: default; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .row input { flex: 1; min-width: 100px; }
+  #chat, #log { height: 340px; overflow-y: auto; border: 1px solid #dde3ee; border-radius: 6px; padding: 8px; background: #fbfcfe; font-size: 14px; }
+  #log { font-family: Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+  .sys { color: #b07800; } .err { color: #c00; } .me { color: #002060; font-weight: bold; }
+  .out { color: #0a7a8a; } .in { color: #666; }
+  #status { margin-left: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <b>Multi Chat Room</b> &mdash; WebSocket demo <span>ws://<span id="host"></span>/ws</span>
+  <span id="status">chưa kết nối</span>
+</header>
+<main>
+  <section>
+    <h2>Chat</h2>
+    <div class="row">
+      <input id="user" placeholder="Tên đăng nhập" value="">
+      <button id="btnLogin">Kết nối &amp; đăng nhập</button>
+    </div>
+    <div class="row">
+      <input id="room" placeholder="Tên phòng" value="General">
+      <button id="btnJoin" disabled>Vào phòng</button>
+    </div>
+    <div id="chat"></div>
+    <div class="row" style="margin-top:8px">
+      <input id="msg" placeholder="Nhập tin nhắn rồi Enter" disabled>
+      <button id="btnSend" disabled>Gửi</button>
+    </div>
+    <div id="online" class="sys"></div>
+  </section>
+  <section>
+    <h2>Envelope JSON thực tế (&rarr; gửi, &larr; nhận)</h2>
+    <div id="log"></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+$('host').textContent = location.host || 'localhost:5050';
+$('user').value = 'user' + Math.floor(Math.random() * 900 + 100);
+let ws = null;
+
+function addChat(text, cls) {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = text;
+  $('chat').appendChild(d);
+  $('chat').scrollTop = $('chat').scrollHeight;
+}
+function addLog(prefix, json, cls) {
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = prefix + ' ' + json;
+  $('log').appendChild(d);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+function send(type, data) {
+  const json = JSON.stringify({ type, data });
+  addLog('-->', json, 'out');
+  ws.send(json);            // mỗi WebSocket message = 1 Envelope JSON
+}
+function setReady(on) {
+  $('btnJoin').disabled = !on; $('msg').disabled = !on; $('btnSend').disabled = !on;
+}
+
+$('btnLogin').onclick = () => {
+  if (ws && ws.readyState === WebSocket.OPEN) return;
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${scheme}://${location.host || 'localhost:5050'}/ws`);
+  ws.onopen = () => {
+    $('status').textContent = 'đã kết nối';
+    send('login', { username: $('user').value.trim(), password: 'demo' });
+  };
+  ws.onclose = () => { $('status').textContent = 'đã ngắt kết nối'; setReady(false); };
+  ws.onmessage = ev => {
+    addLog('<--', ev.data, 'in');
+    const { type, data } = JSON.parse(ev.data);
+    switch (type) {
+      case 'auth': addChat('[Đăng nhập] ' + data.message, 'sys'); setReady(true); send('join', { room: $('room').value.trim() }); break;
+      case 'join': addChat('[Phòng] ' + data.text, 'sys'); break;
+      case 'history': data.messages.forEach(m => addChat(`(lịch sử) ${m.from}: ${m.text}`)); break;
+      case 'chat': addChat(`[${data.room}] ${data.from}: ${data.text}`, data.from === $('user').value.trim() ? 'me' : ''); break;
+      case 'system': addChat('[Hệ thống] ' + data.text, 'sys'); break;
+      case 'online-users': $('online').textContent = 'Online: ' + data.users.join(', '); break;
+      case 'error': addChat('[Lỗi] ' + data.message, 'err'); break;
+    }
+  };
+};
+$('btnJoin').onclick = () => send('join', { room: $('room').value.trim() });
+function sendChat() {
+  const t = $('msg').value.trim();
+  if (!t) return;
+  send('chat', { text: t });
+  $('msg').value = '';
+}
+$('btnSend').onclick = sendChat;
+$('msg').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+</script>
+</body>
+</html>

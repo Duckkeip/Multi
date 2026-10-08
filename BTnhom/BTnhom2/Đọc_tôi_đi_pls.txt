@@ -1,0 +1,8 @@
+Cách chạy (cần .NET 8 SDK):
+
+Mở terminal và Chạy dotnet run --project ChatServer trong thư mục ChatDemo/.
+Mở http://localhost:5050/ ở hai tab trình duyệt, đặt hai tên khác nhau, bấm “Kết nối & đăng nhập”.
+Chat ở một tab, tab kia sẽ nhận tin ngay.
+
+
+Có thể mở trên Phone nếu nhập đúng IPv4 Của máy chạy http://192.x.x.x:5050
