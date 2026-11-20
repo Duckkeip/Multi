@@ -71,6 +71,8 @@ public record GetServerChannelsRequest(string ServerId);
 public record ServerChannelsResponse(string ServerId, List<ServerChannelInfo> Channels);
 public record CreateServerChannelRequest(string ServerId, string Name, ServerChannelType Type);
 public record CreateServerInviteRequest(string ServerId, int? MaxUses = null, int? ExpiresInMinutes = null);
+public record GetServerInvitesRequest(string ServerId);
+public record ServerInvitesResponse(string ServerId, List<ServerInviteInfo> Invites);
 public record ServerInviteInfo(string Code, string ServerId, int? MaxUses, int UsedCount, DateTimeOffset? ExpiresAt);
 public record JoinServerInviteRequest(string Code);
 public record ServerInviteAcceptedResponse(ServerSummary Server, List<ServerChannelInfo> Channels);

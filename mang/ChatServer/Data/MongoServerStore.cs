@@ -142,6 +142,15 @@ public sealed class MongoServerStore
         return (true, "Đã tạo link mời.", ToInvite(invite));
     }
 
+    public async Task<List<ServerInviteInfo>?> GetInvitesAsync(string username, string serverId)
+    {
+        if (!await HasManagementPermissionAsync(username, serverId)) return null;
+        var invites = await _invites.Find(x => x.ServerId == serverId)
+            .SortByDescending(x => x.CreatedAt)
+            .ToListAsync();
+        return invites.Select(ToInvite).ToList();
+    }
+
     public async Task<(bool Success, string Error, ServerSummary? Server, List<ServerChannelInfo>? Channels)> AcceptInviteAsync(string username, string code)
     {
         code = code.Trim();

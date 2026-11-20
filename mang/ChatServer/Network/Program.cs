@@ -245,6 +245,10 @@ public static class Program
                 await HandleCreateServerInviteAsync(session, envelope.As<CreateServerInviteRequest>());
                 break;
 
+            case "get-server-invites":
+                await HandleGetServerInvitesAsync(session, envelope.As<GetServerInvitesRequest>());
+                break;
+
             case "join-server-invite":
                 await HandleJoinServerInviteAsync(session, envelope.As<JoinServerInviteRequest>());
                 break;
@@ -645,6 +649,18 @@ public static class Program
         var result = await ServerStore.CreateInviteAsync(session.Username, req.ServerId, req.MaxUses, req.ExpiresInMinutes);
         await session.SendAsync(result.Success ? "server-invite" : "error",
             result.Success ? result.Invite : new ErrorResponse(result.Error));
+    }
+
+    private static async Task HandleGetServerInvitesAsync(ClientSession session, GetServerInvitesRequest? req)
+    {
+        if (!session.IsAuthenticated || ServerStore == null || string.IsNullOrWhiteSpace(req?.ServerId)) return;
+        var invites = await ServerStore.GetInvitesAsync(session.Username, req.ServerId);
+        if (invites == null)
+        {
+            await session.SendAsync("error", new ErrorResponse("Bạn không có quyền xem link mời của server này."));
+            return;
+        }
+        await session.SendAsync("server-invites", new ServerInvitesResponse(req.ServerId, invites));
     }
 
     private static async Task HandleJoinServerInviteAsync(ClientSession session, JoinServerInviteRequest? req)

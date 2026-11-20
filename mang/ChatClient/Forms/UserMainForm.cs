@@ -784,7 +784,16 @@ public sealed class UserMainForm : Form
         invite.Width = 180;
         invite.Visible = item.Server.Role is ServerRole.Owner or ServerRole.Admin;
         invite.Click += (_, _) => ShowCreateInvite();
-        SetPage(title, copy, invite);
+        var viewInvites = MakeButton("Xem link đã tạo", UiTheme.SurfaceRaised);
+        viewInvites.Location = new Point(192, 110);
+        viewInvites.Width = 190;
+        viewInvites.Visible = item.Server.Role is ServerRole.Owner or ServerRole.Admin;
+        viewInvites.Click += (_, _) =>
+        {
+            _network.Send("get-server-invites", new GetServerInvitesRequest(item.Server.Id));
+            SetStatus("Đang tải các link mời...");
+        };
+        SetPage(title, copy, invite, viewInvites);
         SetStatus("Đang tải kênh...");
     }
 
@@ -891,6 +900,12 @@ public sealed class UserMainForm : Form
             case "server-invite":
                 var invite = envelope.As<ServerInviteInfo>();
                 if (invite != null) ShowCreatedInvite(invite);
+                break;
+
+            case "server-invites":
+                var invites = envelope.As<ServerInvitesResponse>();
+                if (invites != null && _selectedServer?.Id == invites.ServerId)
+                    ShowServerInvites(invites.Invites);
                 break;
 
             case "server-channels":
@@ -1079,8 +1094,106 @@ public sealed class UserMainForm : Form
         if (result == DialogResult.Yes) Clipboard.SetText(link);
     }
 
+    private void ShowServerInvites(List<ServerInviteInfo> invites)
+    {
+        if (invites.Count == 0)
+        {
+            MessageBox.Show(this, "Server chưa có link mời nào được tạo.", "Link mời",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using var dialog = new Form
+        {
+            Text = "Link mời đã tạo",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ClientSize = new Size(600, 390),
+            BackColor = UiTheme.Canvas,
+            ForeColor = UiTheme.Text,
+            Font = Font
+        };
+
+        var description = new Label
+        {
+            Text = "Chọn link để xem và sao chép. Link vĩnh viễn sẽ hiển thị trạng thái không hết hạn.",
+            Location = new Point(16, 14),
+            AutoSize = true,
+            ForeColor = UiTheme.Muted
+        };
+        var list = new ListBox
+        {
+            Location = new Point(16, 46),
+            Size = new Size(568, 250),
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
+            DisplayMember = nameof(InviteListItem.Summary),
+            BackColor = UiTheme.Surface,
+            ForeColor = UiTheme.Text
+        };
+        var link = new TextBox
+        {
+            Location = new Point(16, 306),
+            Width = 568,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
+            ReadOnly = true
+        };
+        var copy = MakeButton("Sao chép", UiTheme.Primary);
+        copy.Location = new Point(442, 344);
+        copy.Size = new Size(142, 32);
+        copy.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
+        copy.Enabled = false;
+        var close = MakeButton("Đóng", UiTheme.SurfaceRaised);
+        close.Location = new Point(16, 344);
+        close.Size = new Size(100, 32);
+        close.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
+        close.Click += (_, _) => dialog.Close();
+
+        foreach (var invite in invites)
+            list.Items.Add(CreateInviteListItem(invite));
+        list.SelectedIndexChanged += (_, _) =>
+        {
+            if (list.SelectedItem is not InviteListItem selected) return;
+            link.Text = selected.Link;
+            copy.Enabled = true;
+        };
+        list.DoubleClick += (_, _) => copy.PerformClick();
+        copy.Click += (_, _) =>
+        {
+            if (list.SelectedItem is InviteListItem selected)
+            {
+                Clipboard.SetText(selected.Link);
+                SetStatus("Đã sao chép link mời.");
+            }
+        };
+
+        dialog.Controls.AddRange([description, list, link, copy, close]);
+        list.SelectedIndex = 0;
+        dialog.ShowDialog(this);
+    }
+
+    private static InviteListItem CreateInviteListItem(ServerInviteInfo invite)
+    {
+        var status = invite.ExpiresAt is null
+            ? "Không hết hạn"
+            : invite.ExpiresAt.Value <= DateTimeOffset.UtcNow
+                ? "Đã hết hạn"
+                : $"Hết hạn {invite.ExpiresAt.Value.LocalDateTime:g}";
+        if (invite.MaxUses is int maxUses)
+            status += invite.UsedCount >= maxUses
+                ? " · Đã hết lượt"
+                : $" · Đã dùng {invite.UsedCount}/{maxUses}";
+        else
+            status += $" · Đã dùng {invite.UsedCount} lượt";
+
+        return new InviteListItem($"rechat://invite/{invite.Code} · {status}", $"rechat://invite/{invite.Code}");
+    }
+
     private static Label PageTitle(string text) => new() { Text = text, AutoSize = true, ForeColor = UiTheme.Text, Font = new Font("Segoe UI Semibold", 24F), Location = Point.Empty };
     private static Label PageCopy(string text, int top, Color? color = null) => new() { Text = text, AutoSize = true, MaximumSize = new Size(620, 0), Location = new Point(0, top), ForeColor = color ?? UiTheme.Muted, Font = new Font("Segoe UI", 10.5F) };
+
+    private sealed record InviteListItem(string Summary, string Link);
 
     private sealed record ServerListItem(ServerSummary Server)
     {
